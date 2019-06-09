@@ -434,14 +434,14 @@ Create UBCF Recommender
   eval_recommender <- Recommender(data = getData(eval_sets, "train"), method = model_to_evaluate, parameter = model_paramenter)
   eval_recommender  
 ```
-Get UBCF Filter predictions for known test set  
+Calculate the UBCF predictions for known test set  
 ```{r Get evaluation predictions, echo=FALSE}
   items_to_recommend <- 10
   eval_prediction <- predict(object = eval_recommender, newdata = getData(eval_sets, "known"), n = items_to_recommend, type = "ratings")
   eval_prediction 
 ```
-Calculate the prediction accuracy for each user in unknown test set:
-```{r Calculate the prediction accuracy UBCF, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Calculate the prediction accuracy for each user in unknown test set :
+```{r Calculate the prediction accuracy UBCF, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
   eval_accuracy <- calcPredictionAccuracy(x = eval_prediction, data = getData(eval_sets, "unknown"), byUser = TRUE)
   head(eval_accuracy)
 ```
@@ -454,14 +454,21 @@ Calculate the overall accuracy given in unknown test set:
   eval_accuracy <- calcPredictionAccuracy(x = eval_prediction, data = getData(eval_sets, "unknown"), byUser = FALSE)
   eval_accuracy
 ```
-Use precicion recall to predict accuracy with confusion matrix for known test set
-```{r Use prediction recall to predict accuarcy, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-  results <- evaluate(x = eval_sets, method = model_to_evaluate, n = seq(10, 100, 10))
-  head(getConfusionMatrix(results)[[1]])
+Note the overall RMSE and the accuracy are good. 
+
+Using a precicion recall plot to predict accuracy with confusion matrix for known test set
+```{r Use prediction recall to predict accuarcy, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+  results <- evaluate(x = eval_sets, method = model_to_evaluate, n = seq(10, 100, 10))  
+```
+
+Evaluate the result with confusion matrix  
+
+```{r Show Confusion Matrix }
+  head(getConfusionMatrix(results)[[1]])  
   # note first 4 columns cotain the True False Positives
 ```
-Sum up the UBCF indexes:
-```{r Sum up the UBCF indexes, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Sum up the UBCF TP, FP, FN, TN indexes and plot:
+```{r Sum up the UBCF indexes, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 #sum up the indexes 
   columns_to_sum <- c("TP","FP","FN","TN")
   indicies_summed <- Reduce("+", getConfusionMatrix(results))[,columns_to_sum]
@@ -470,27 +477,29 @@ Sum up the UBCF indexes:
 ```
 *Note: it is difficult to visulize the data provided unless the results are plotted.*
 
-
 Create UBCF Receiver operating characteristic (ROC) plot
 ```{r Create UBCF ROC plot, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-  plot(results, annotate = TRUE, main = "UBCF - ROC Curve")  
+  plot(results, annotate = TRUE, main = "UBCF - ROC Curve")    
 
 ```
+
+Note plot shows the relation ship between TPR and FPR  
+At 30 the TPR is close to 0.7 and the FPR is less than 0.4 is good  
+At 40 the TPR is close to 0.7 but the FPR is greater than 0.4 is not as good  
+
 
 Plot UBCF Precision/recall to verify accuracy
 ```{r Plot UBCF Precision recall, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-#plot shows the relation ship between TPR and FPR
-  #30 TPR is close to 0.7 and the FPR is less than 0.4 is good
-  #40 TPR is close to 0.7 but the FPR is greater than 0.4 is not as good
+
   plot(results, "prec/rec",annotate = 1, main = "UBCF - Precision/recall")   
 
 ```
+
 *Note the precision/recall at #30 is not the best at 0.58/0.66*
 
-
 #### Fine Tuning of the Models to get best results
-
-Create UBCF Models with varing vector_nn and different metods i.e.: cosine and pearson
+Lets try different factors to see if we can get a better Precision Recall result.
+Create UBCF Models with varing vector_nn and different methods i.e.: cosine and pearson.
 
 ```{r Fine tune UBCF model, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 vector_nn <- c(5,10,20, 30)
@@ -507,13 +516,13 @@ models
 
 Determine the best UBCF results based on number of recommendations  
 
-```{r Get UBCF results, echo=FALSE}
+```{r Get UBCF results, include=FALSE}
 n_recommendations <- c(1, 5, seq(10,100,10))
 list_results <- evaluate(x = eval_sets, method = models, n = n_recommendations)  
 
 ```
 
-Plot UBCF results 
+Plot UBCF Models with varing vector_nn and different methods results
 
 ```{r plot UBCF model results, echo=FALSE}
 plot(list_results, annotate = c (1,2), legend = "bottomright")
@@ -525,19 +534,22 @@ title("UBCF ROC curve")
 
 ```{r echo=FALSE}
 plot(list_results, "prec/rec",annotate = 1, legend= "bottomleft")
-title("UBCF Precision/recall")
+title("UBCF Precision/recall")  
+
 ```
+
 *Note: The precision/recall support UBCF_pea_k_30 appears to be the best UBCF model with high persision*
 
 
-Create IBCF Models with varing vector_nn and different metods i.e.: cosine and pearson
-```{r Create IBCF model, echo=FALSE}
+#### Create IBCF Model
+Create IBCF Models with varing vector_kn and different methods i.e.: cosine and pearson
+```{r Create IBCF model, include=FALSE}
 vector_k <- c(5,10,20,30)
 IBCF_cos_model <- lapply(vector_k, function(k,l){ list(name ="IBCF", param = list(method = "cosine", k = k))})
 names(IBCF_cos_model) <- paste0("ICBF_cos_k_", vector_k)
 names(IBCF_cos_model)[1]
 IBCF_pea_model <- lapply(vector_k, function(k,l){ list(name ="IBCF", param = list(method = "pearson", k = k))})
-names(IBCF_pea_model) <- paste0("ICBF_pea_k_", vector_k)
+names(IBCF_pea_model) <- paste0("IBCF_pea_k_", vector_k)
 names(IBCF_pea_model)
 models <- append(IBCF_cos_model, IBCF_pea_model)
 models
@@ -545,18 +557,20 @@ models
 
 Get IBCF model results 
 
-```{r Get IBCF results, echo=FALSE}
+```{r Get IBCF results, include=FALSE}
 n_recommendations <- c(1, 5, seq(10,100,10))
 list_results <- evaluate(x = eval_sets, method = models, n = n_recommendations)   
 
 ```
  
- Plot IBCF results   
+ Plot IBCF with varing vector_kn and different methods results   
  
 ```{r plot IBCF ROC curve, echo=FALSE}
 plot(list_results, annotate = c (1,2), legend = "bottomright")
 title("IBCF ROC curve")   
 ```
+
+*Note ICBF_pea_k30 appears the best*
 
 ```{r plot IBCF Precision/recall, echo=FALSE}
 plot(list_results, "prec/rec",annotate = 1, legend= "bottomright")
@@ -564,12 +578,14 @@ title("Precision/recall")
   
 ```
 
-IBCF model #10-40 TPR is closes to to 0.7 and the FPR is less than 0.4 is good
+*Note IBCF Pearson with higher k values had better precision than the cosine algorithm.
 
-####Create a POPULAR model   
+####Create a POPULAR model  
+
+The POPULAR model is simple based on items popularity, there are no adjustment to be made.
 
 Create POPULAR model   
-```{r Create Popular model, echo=FALSE}
+```{r Create Popular model, include=FALSE}
 vector_nn <- 30
 POP_model <- lapply(vector_nn, function(nn,l){ list(name ="POPULAR")})
 names(POP_model) <- "POPULAR"
@@ -578,8 +594,6 @@ models <- POP_model
 models  
 
 ```
-
-Get POPULAR Results   
 
 ```{r Get Popular list results, include=FALSE}
 n_recommendations <- c(1, 5, seq(10,100,10))
@@ -621,30 +635,29 @@ title("ROC curve")
 ```{r Plot Best Precision/recall, echo=FALSE}
 plot(list_results, "prec/rec",annotate = 1, legend= "bottomright")
 title("Precision/recall")   
+
 ```
 
+It appears that UBCF_pea_k_30 and POPULAR are extremly close to each other.
 
-### Evaluate using the Validation dataset
 
-#### Initial Analysis of Validation data:
-Dimensions (rows/columns):
-```{r Initial view of Validation data, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+### Result with Validation dataset
+Based on the previous models I have reviewed all being very close, I will Evaluate the validation set (I converted the data earlier to realRatingsMatrix)
+```{r Initial view of Validation data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+#Initial Analysis of Validation data:
+#Dimensions (rows/columns):
 dim(validation)
 ```
-Corner view of Validation data:
-```{r Corner view of Validation data, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-corner(validation)
-```
-
+```{r Corner view of Validation data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+corner(validation)  
 
 ```
-Summary of validation realRatingMatrix dataset:  
-```{r echo=FALSE}
+```{r Summary of validation, echo=FALSE}
 cat("Total number of ratings in validation dataset:\t", nratings(val_data),"\n")
-cat("Total Users to Movies in validation set:\t", dim(val_data), "\n")   
+cat("      Total Users to Movies in validation set:\t", dim(val_data), "\n")   
 ```
 
-Create Validation Sets
 ```{r echo=FALSE}
 items_to_keep <-30
 rating_threshold <- 4
@@ -653,12 +666,11 @@ n_recommendations <- c(1, 5, seq(10,100,10))
 val_sets <- evaluationScheme(data = val_data, method = "cross-validation", train 
                                 = percentage_training, given = items_to_keep, goodRating = rating_threshold, k = n_fold)  
 ```
-Evaluate Validation data with selected models  
 
-Final UBCF Evaluation results:  
 ```{r Final UBCF Evaluation results, echo=FALSE}
 UBCF_eval <- evaluate(x = val_sets, method = "UBCF", k = n_fold, type = "ratings")
-
+cat("Final UBCF Evaluation results: \n\n")
+head(getConfusionMatrix(UBCF_eval)[[1]]) 
 ```
 
 ```{r Final UBCF Results, echo=FALSE}
@@ -667,11 +679,10 @@ head(getConfusionMatrix(UBCF_eval)[[1]])
 ```
 
 Final IBCF Evaluation results:  
-```{r echo=FALSE}
+```{r include=FALSE}
 IBCF_eval <- evaluate(x = val_sets, method = "IBCF", k = n_fold, type = "ratings")
 
 ```
-
 
 ```{r IBCF Results, echo=FALSE}
 head(getConfusionMatrix(IBCF_eval)[[1]])
@@ -679,7 +690,7 @@ head(getConfusionMatrix(IBCF_eval)[[1]])
 ```
 
 Final POPULAR Evaluation results:  
-```{r Final POPULAR Evaluation results, echo=FALSE}
+```{r Final POPULAR Evaluation results, include=FALSE}
 POP_eval <- evaluate(x = val_sets, method = "POPULAR", n = n_recommendations, type = "ratings")
 
 ```
@@ -690,8 +701,8 @@ head(getConfusionMatrix(POP_eval)[[1]])
 
 ### Conclusion
 
-In Conclusion using using the **POPULAR**  model from the recommenderLab library, keeping **30** items with a predicted movie rating of **4** reports an RMSE of **0.872**.
-In this capstone prioject I learned various ways to improve speed using different classes of data and different libraries that were not introduced in the class.
+In Conclusion using the **POPULAR**  algorithm model from the recommenderLab library, keeping **30** items with a predicted movie rating of **4** reports an RMSE of **0.860**.
+In this capstone project I learned various ways to improve speed using different classes of data and different libraries that were not introduced in the class.
 
 ```{r File size reduction, echo=FALSE}
 cat("The Prepared dataset was reduced by", object.size(as(edx_3, "matrix"))/object.size(edx_3),"to 1 byte when converted from matrix to realRatingsMatrix which greatly reduced time, memory issues and stress.\n")
