@@ -51,10 +51,10 @@ download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", destfi
 unzip("ml-10m.zip", exdir = "movies")
 #dir("movies")
 #dir("movies/ml-10m100K/")
-ratings  <- fread("ml-10m100K/ratings.dat", sep = ":")[, c(1,3,5,7), with=FALSE]
+ratings  <- fread("movies/ml-10m100K/ratings.dat", sep = ":")[, c(1,3,5,7), with=FALSE]
 setnames(ratings, c("userId","movieId","rating", "timestamp"))
 
-movies <- str_split_fixed(readLines("ml-10m100K/movies.dat"), "\\::", 3)
+movies <- str_split_fixed(readLines("movies/ml-10m100K/movies.dat"), "\\::", 3)
 colnames(movies) <- c("movieId", "title", "genres")
 
 movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
@@ -338,6 +338,12 @@ image(as(model_data,"matrix"), main = "Visual image of Rating distribution - Mod
 
 Model data appears to be well ditributed.   
 
+Analyze number of movie ratings per user
+```{r Analyze number of ratings per users, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+  table(rowCounts(model_data)) 
+```
+Note that only one user has rated 96,97 of the top 100 rated movies, no one has rated all movies in our model dataset. 
+
 
 #### Create Modeling datasets  
 
@@ -371,42 +377,35 @@ I will use various models then compare prediction accuracies to determine the be
 Collaborative filtering uses algorithims to filter users ratings to make personalized recommendations from similiar users (definition from whatis.techtarget.com/definition/collaborative-filtering).
 
 ```{r Build User Based Collabrotive model, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-recc_model <- Recommender(data = rec_data_train, method = "UBCF")  
-recc_model  
-recc_model@model$data  
+ubcf_model <- Recommender(data = rec_data_train, method = "UBCF")  
+ubcf_model  
+ubcf_model@model$data  
 ```
 
-Get recommendations for testset:
+Using the UBCF recommendations 
 ```{r Get recommender test set, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
 # note UBCF model is a lazy learner technic that must access all data in order to make a prediction
   n_recommended <- 10
-  recc_predicted <- predict(object = recc_model, newdata = rec_data_test, n = n_recommended)
-  rec_list <- sapply(recc_predicted@items, function(x){colnames(model_data)[x]})
+  ubcf_predicted <- predict(object = ubcf_model, newdata = rec_data_test, n = n_recommended)
+  ubcf_list <- sapply(ubcf_predicted@items, function(x){colnames(model_data)[x]})
 ```
 
 List of recommendation movies for test set users 7 thru 10:  
 ```{r List recommendations for a few users, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-  rec_list[7:10]  
+  ubcf_list[7:10]  
 
 ```
 Total number of recommendations by users in test set  
 ```{r Total number of recommenders in test set, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-  number_of_items = sort(unlist(lapply(rec_list, length)), decreasing = TRUE)
+  number_of_items = sort(unlist(lapply(ubcf_list, length)), decreasing = TRUE)
   table(number_of_items)
 ```
-Note that 428 users from the test set received 10 recommendations. 
-
-Analyze number of ratings per user
-```{r Analyze number of ratings per users, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-  table(rowCounts(model_data)) 
-```
-Note that only one user has rated 96 of the top 100 rated movies. 
+Note that approx 427 users from the test set received 10 recommendations. 
 
 
 #### Create an evaluators scheme:
-Create evaluation datasets using recommenderLab evaluationScheme function  
 
-```{r Create Evaluation scheme, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+```{r Create Evaluation scheme, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
   items_to_keep <- 30
   rating_threshold <- 4
   n_fold <- 5
@@ -415,11 +414,14 @@ Create evaluation datasets using recommenderLab evaluationScheme function
   eval_sets  
 ```
 
+Create evaluation datasets using cross-validation method, keeping **`r items_to_keep`** items and **`r n_fold`** folds with rating threshold of **`r rating_threshold`**  using the recommenderLab evaluationScheme function.  
+
 ```{r Get size of evaluation sets, echo=FALSE}
   size_sets <- sapply(eval_sets@runsTrain, length)   
   cat("Sizes of Evaluation Sets:\t", size_sets, "\n")   
   getData(eval_sets, "train")
 ```
+
 3 sets will be used:
   train = training set  
   known = test set used to build recommendations   
