@@ -35,8 +35,13 @@ library(data.table)
 library(useful)
 library(lubridate)
 library(recommenderlab)
+
+#Initial data variables
+top_movie_n <- 100
+users_movie_n <- 70
+
 ```
-```{r Load Data, echo=FALSE}
+```{r Load Data, include=FALSE}
 cat("Movielens Preptime Times:")  
 system.time({
 # MovieLens 10M dataset:
@@ -78,28 +83,27 @@ rm( ratings, movies, test_index, temp, movielens, removed)
 #Modifing the code to use reduces initial dataset process to approx 1 minute.
 ```
 
-#### Initial Analysis of EDX Data:  
-```{r quick review of dataset, echo=FALSE}
+### Initial Analysis of EDX Data:  
+```{r Summary of edx of dataset, echo=FALSE}
 edx_rows <- nrow(edx)
 edx_cols <- ncol(edx)
 edx_names <- names(edx)
-glimpse(edx) 
-summary(edx)
-class(edx)
-test_na <- na.omit(edx)
-dim(test_na) #it appears there is no missing data in edx
-cat("Size of edx file (bytes) : " , object.size(as(edx,"matrix")), "\n")   
-cat("Dimensions (rows/columns): " , dim(edx),"\n")  
-cat("Glimpse view of edx data  : ")
-corner(edx,c = 6) 
+summary(edx)   
 ```
+From the  summary of edx dataset we know there are 9000061 row with 6 variables UserId, MovieId, rating, timestamps, title and multiple combinations of genres. It also appears there is no missing data.
 
-First review a sample set of edx dataset, using the image of the dataset with selected 100 users and 100 movies. In the image below, each row represents a user and the columns represent movies they rated. 
-
-Note in our sample set that not every user has rated a movie and another user has almost rated every movie. Since I plan to use User based Collaborative Filtering and  Item Based Collabative Filtering for my predictions, I need my good dataset with many users that have rated at least a many movies.
+```{r Glimpe of edx dataset, echo=FALSE}
+glimpse(edx)
+```
+A glimpse of the data I notice timestamp needs to be converted if I am to do any timeseries related predictions which my current plan does not.
+  
+```{r Additional intial information, eval=FALSE, include=FALSE}
+class(edx)
+cat("Size of edx file (bytes) : " , object.size(as(edx,"matrix")), "\n")   
+```
+####Image of 100 users and 100 movies. 
 
 ```{r Top 100 movies by rating counts, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-
 users <- sample(unique(edx$userId), 100)
 
 edx %>% filter(userId %in% users) %>% 
@@ -108,63 +112,70 @@ edx %>% filter(userId %in% users) %>%
   spread(movieId, rating) %>% select(sample(ncol(.), 100)) %>% 
   as.matrix() %>% t(.) %>%
   image(1:100, 1:100,. , xlab="Movies", ylab="Users")
-abline(h=0:100+0.5, v=0:100+0.5, col = "grey", main = "Image of 100 users and 100 movies rated")
+abline(h=0:100+0.5, v=0:100+0.5, col = "grey")   
+
 ```
 
-Plot edx data for the count of movies rated:
+In the image above, note each row represents a user and the columns represent movies they rated. Notice that not every user has rated a movie (row 2) in the sample set to some rating numerous movies. Since I plan to use content based filtering for my predictions, I need my good dataset with many users that have rated at many movies. 
 
+
+Plot edx data for the count of movies rated:  
 ```{r Get Movie rating counts, echo=FALSE}
 edx %>% 
   dplyr::count(movieId) %>% 
   ggplot(aes(n)) + 
   geom_histogram(bins = 30, color = "black") + 
   scale_x_log10() + 
-  ggtitle("Movies")
+  ggtitle("Movies Rating Counts")  
+
 ```
 
-Plot the count of ratings given by users:
+Looking at the Movies Rating Count plot, shows that the majority of movies have been rated over 200 times.
 
+
+Plot the count of ratings given by users:  
 ```{r Get User Rating counts, echo=FALSE}
 edx %>% 
   dplyr::count(userId) %>% 
   ggplot(aes(n)) + 
   geom_histogram(bins = 30, color = "black") + 
   scale_x_log10() + 
-  ggtitle("Users")
+  ggtitle("Users Rating Counts")  
 
 ```
 
-### Preparing Data:
-####Filter EDX for a good set of data
-We need a good set of data to create our recommendation models. Based on the information provided in the above graphs we notice that most users rated more than 20 movies. The the previously selected users I filter users that have rated at least 1 top 100 movie.
-```{r Preparing data, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Looking at the Users Rating Counts, shows that most users have rated at least **`r users_movie_n`**  movies
+
+### Preparing Data:   
+```{r Clean data remove low rating count users, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
 keep_user <- edx %>%
   dplyr::count(userId) %>%
-  filter(n >= 20) %>%
+  filter(n >= users_movie_n) %>%
   pull(userId)
 
-edx_1 <- edx %>%filter(userId %in% keep_user) 
+edx_1 <- edx %>%filter(userId %in% keep_user)  
+```
+Based on the discovered information, I identify users who have rated 20 movies or more, leaving **`r length(keep_user)`** users. 
 
+
+```{r Clean data Get top  100 movies, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
 keep <- edx %>%
   dplyr::count(movieId) %>%
-  top_n(100) %>%
+  top_n(top_movie_n) %>%
   pull(movieId)
 
 edx_1 <- edx_1 %>%filter(movieId %in% keep)  
 ```
-Giving a dataset with **`r length(keep)`** movies and **`r length(keep_user)`** with **`r dim(edx_1)`** ratings and columns.  
+Due to performance issues I use only the top 100 rated movies, giving a dataset with **`r length(keep)`** movies and **`r length(keep_user)`** with **`r dim(edx_1)`** ratings and columns.  
 
-```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
-cat("Size of Prepared Dataset\t", object.size(as(edx_1,"matrix")),"\n")
+Do to the size of the datasets and reading several articules, I have choosen to use sparse matrix because  "Sparse matracies also have significant advandatages in terms of computational efficiency. Unlike opertations with fill matrices, operatios with sparce matricies do not perform unnessessary low-level arithmetics"  Priyam (2016). The decision to use sparse matrices has lead my to use recommenderLab, Hahsler (2019) which will involve converting my edx data.frame data to matrix to finally realRatingMatrix class.   
 
-```
-I will be using the recommenderLab library for creating my recomendations therefore I must convert my data to realRatingMatrix class. Converting to realRatingsMatrix requires the data to be converted to a sparse matrix and also greatly reduces the file size.  
-1. I used dcast.data.table to cast the data.frame as a table  
-2. I used sprintf to convert MovieId's, and UserId's to chr  
-3. I used corner to view a small sample of the data to verify conversion  
-4. I then convert the data ta a matrix and then a realRatingMatrix  
+```{r Convert edx to realRatingsMatrix, include=FALSE}
+#1. I used dcast.data.table to cast the data.frame as a table  
+#2. I used sprintf to convert MovieId's, and UserId's to chr  
+#3. I used corner to view a small sample of the data to verify conversion  
+#4. I then convert the data ta a matrix and then a realRatingMatrix  
 
-```{r Convert edx to realRatingsMatrix, echo=FALSE}
 edx_2 <- dcast(userId ~ movieId, data = edx_1, value.var = "rating")
 dim(edx_2)
 class(edx_2)
@@ -192,42 +203,89 @@ class(edx_3)
 str(edx_3)  
 ```
 
+```{r performance related info, eval=FALSE, include=FALSE}
+cat("                Size of edx file : ", object.size(as(edx,"matrix")), " bytes\n")  
+cat("          Size of Trimed Dataset : ", object.size(as(edx_1,"matrix")), " bytes\n")  
+cat("   Size of Trimed Matrix Dataset : ", object.size(as(edx_2,"matrix")), " bytes\n")  
+
+```
+
+```{r convert Validation dataset realRatingMatrix, include=FALSE}
+val_movies <- validation %>%
+  dplyr::count(movieId) %>%
+  top_n(1000) %>%
+  pull(movieId)
+val_user <- validation %>%
+  dplyr::count(userId) %>%
+  filter(n > 10) %>%
+  pull(userId)
+val_1 <- validation %>%filter(userId %in% val_user)
+dim(edx_1)
+val_1 <- val_1 %>%filter(movieId %in% val_movies)
+dim(val_1)
+val_2 <- dcast(userId ~ movieId, data = val_1, value.var = "rating")
+dim(val_2)
+
+#view data
+require(useful)
+  corner(val_2)
+
+#change rownames
+rownames(val_2) <- sprintf("User%s",val_2$userId)
+val_2$userId <- NULL
+corner(val_2)
+
+#change column Names
+colnames(val_2) <- sprintf("Movie%s",colnames(val_2))
+corner(val_2)
+
+#convert to matrix  
+val_2 <- as.matrix(val_2)
+#head(edx_2)
+#class(edx_2)
+dim(val_2)
+val_3 <- as(val_2, "realRatingMatrix")
+val_data <- val_3[rowCounts(val_3) >70]  
+```
 
 ####Review the prepared dataset  
-
-Review ratings distribution  
 
 ```{r Review ratings distribution, echo=FALSE}
 hist(getRatings(edx_3), main = "Distribution of Ratings")
 ```
 
+The Distribution of Ratings shows we have 10 different possible ratings from 0.5 to 5 in incriments of 0.5.
+
 ```{r Normalized Distribution of Ratings, echo=FALSE }
-hist(getRatings(normalize(edx_3)),breaks = 100,main = "Normalized Distribution of Ratings")
+hist(getRatings(normalize(edx_3)),breaks = 100,main = "Normalized Distribution of Ratings")  
+
 ```
 
 ```{r Visual image of distribution of first 500 users, echo=FALSE}
-image(edx_3[1:500,],main = "Visual image of distribution of first 500 users")
+image(edx_3[1:500,],main = "Visual image of distribution of first 500 users")  
+
 ```
 
-```{r Avg Ratings of Prepared data, echo = TRUE}
+```{r Avg Ratings of Prepared data, eval=FALSE, include=FALSE}
 boxplot(rowMeans(edx_3),main = "Avg Ratings of Prepared data")  
 
 ```  
 
-### Create Model Dataset  
+*Due to performance/memory issues, I remove users with less than 70 movie ratings for my model dataset*
 
-#### Trim Dataset  
-
-Due to memory issues, I remove users with less than 70 movie ratings.  
-
-```{r Create model data, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-model_data <- edx_3[rowCounts(edx_3) > 70]
-model_data
-boxplot(rowMeans(model_data), main = "Model Data")  
+```{r Reduce userIds, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+#users_movie_n <- 70  #started at 30+ movies rated by user but had performance issues so increased to 70+
 ```
 
-### Remove Outliers  
-When looking at the previous boxplot of the Model Data we have a few outliers with row means below 2.7 and above 4.6 so I will remove them.
+```{r Create model data, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+model_data <- edx_3[rowCounts(edx_3) > users_movie_n]
+model_data
+boxplot(rowMeans(model_data), main = "Box Plot of Rating Means")  
+
+```
+
+I can further cleeanup data by removing outlirers, When looking at the previous boxplot of the dataset we have a few outliers with row means below 2.7 and above 4.6 so I will remove them.
 
 Outiers with rowMeans below 2.7 to remove
 
@@ -280,8 +338,8 @@ image(as(model_data,"matrix"), main = "Visual image of Rating distribution - Mod
 
 Model data appears to be well ditributed.   
 
-### Create Recommender Sets  
-Divide the Model data set into train and test sets, 80/20 respectivly.  
+
+#### Create Modeling datasets  
 
 ```{r Create recommender sets, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 set.seed(1)
@@ -291,45 +349,26 @@ rec_data_train <- model_data[which_train]
 rec_data_test <- model_data[!which_train]
 
 ```
-Recommender Train set diminsions: `r dim(rec_data_train)`  
-Recommender Test set diminsions: `r dim(rec_data_test)`  
+Divide the Model data set into train and test sets, 80/20 respectively.  
 
-### Build Models  
-I will use various models then compare prediction accuracies to determine the best algorithim. The available models I will use include:  
+Train set diminsions: `r dim(rec_data_train)`  
+Test set diminsions: `r dim(rec_data_test)`  
 
-$IBCF_realRatingMatrix
-Recommender method: IBCF for realRatingMatrix
-Description: Recommender based on item-based collaborative filtering.
-Reference: NA
-Parameters:
-   k   method normalize normalize_sim_matrix alpha na_as_zero
-1 30 "Cosine"  "center"                FALSE   0.5      FALSE
 
-$POPULAR_realRatingMatrix
-Recommender method: POPULAR for realRatingMatrix
-Description: Recommender based on item popularity.
-Reference: NA
-Parameters:
-  normalize                                                    aggregationRatings
-1  "center" new("standardGeneric", .Data = function (x, na.rm = FALSE, dims = 1, 
-                                                  aggregationPopularity
-1 new("standardGeneric", .Data = function (x, na.rm = FALSE, dims = 1, 
+#### Build Models Options 
 
-$RANDOM_realRatingMatrix
-Recommender method: RANDOM for realRatingMatrix
-Description: Produce random recommendations (real ratings).
-Reference: NA
-Parameters: None
-
-```{r Veiw various recommender models, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+```{r Get list of recommender models available, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 recommender_models <-recommenderRegistry$get_entries(dataType = "realRatingMatrix")  
-recommender_models  
-lapply(recommender_models,"[[","description")    
 ```
-From the list above I will be using UBCF, IBCF and POPULAR models.
+
+```{r show model details, eval=FALSE, include=FALSE}
+lapply(recommender_models,"[[","description")   
+recommender_models  #Description, references and parameteres of models
+```
+I will use various models then compare prediction accuracies to determine the best algorithim. The available models I will first use a user-based collaborative filtering algorithm (UBCF), then item-based collaborative filtering (IBCF) and item popularity algorithms (POPULAR).
 
 #### User Based Collborative Filtering (UBCF) Model
-Collaborative filterin uses algorithims to filter users ratings to make personalized recommendations from similiar users (difinitio n from whatis.techtarget.com/definition/collaborative-filtering )
+Collaborative filtering uses algorithims to filter users ratings to make personalized recommendations from similiar users (definition from whatis.techtarget.com/definition/collaborative-filtering).
 
 ```{r Build User Based Collabrotive model, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
 recc_model <- Recommender(data = rec_data_train, method = "UBCF")  
@@ -595,43 +634,7 @@ Corner view of Validation data:
 corner(validation)
 ```
 
-#### Convert Validation dataset to matrix then to realRatingMatrix  for use with recommenderlab  
-```{r Convert validation to realRatingsMatrix, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
-val_movies <- validation %>%
-  dplyr::count(movieId) %>%
-  top_n(1000) %>%
-  pull(movieId)
-val_user <- validation %>%
-  dplyr::count(userId) %>%
-  filter(n > 10) %>%
-  pull(userId)
-val_1 <- validation %>%filter(userId %in% val_user)
-dim(edx_1)
-val_1 <- val_1 %>%filter(movieId %in% val_movies)
-dim(val_1)
-val_2 <- dcast(userId ~ movieId, data = val_1, value.var = "rating")
-dim(val_2)
 
-#view data
-require(useful)
-  corner(val_2)
-
-#change rownames
-rownames(val_2) <- sprintf("User%s",val_2$userId)
-val_2$userId <- NULL
-corner(val_2)
-
-#change column Names
-colnames(val_2) <- sprintf("Movie%s",colnames(val_2))
-corner(val_2)
-
-#convert to matrix  
-val_2 <- as.matrix(val_2)
-#head(edx_2)
-#class(edx_2)
-dim(val_2)
-val_3 <- as(val_2, "realRatingMatrix")
-val_data <- val_3[rowCounts(val_3) >70]
 ```
 Summary of validation realRatingMatrix dataset:  
 ```{r echo=FALSE}
@@ -700,3 +703,7 @@ A downfall User Based Collaborative Filtiering is the user need to have rated a 
 
 
 The idea of gathering similiar users based on movies they watched and how they rated the movies then use the total average means to predict the movie ratings.  All this said I begin cleaning the data based on users than have rated alot of movies.  
+
+To cite package ‘recommenderlab’ in publications use:
+Michael Hahsler (2019). recommenderlab: Lab for Developing and Testing Recommender Algorithms. R package version 0.2-4. https://github.com/mhahsler/recommenderlab
+
